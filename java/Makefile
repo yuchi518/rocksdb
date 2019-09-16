@@ -181,6 +181,17 @@ MAIN_CLASSES = $(OUTPUT)/classes
 TEST_CLASSES = $(OUTPUT)/test-classes
 JAVADOC = $(OUTPUT)/apidocs
 
+NATIVE_JAVA_CLASSES_SUBST = $(subst org.rocksdb.WriteBatch.Handler,, $(NATIVE_JAVA_CLASSES))
+NATIVE_JAVA_SOURCE_WO_EXT = $(subst org.rocksdb.,org/rocksdb/,$(NATIVE_JAVA_CLASSES_SUBST))
+NATIVE_JAVA_SOURCE_W_EXT = $(NATIVE_JAVA_SOURCE_WO_EXT:=.java)
+NATIVE_JAVA_SOURCE = $(addprefix $(MAIN_SRC)/,$(NATIVE_JAVA_SOURCE_W_EXT))
+
+NATIVE_JAVA_TEST_CLASSES_SUBST = $(subst org.rocksdb.NativeComparatorWrapperTest.NativeStringComparatorWrapper,org.rocksdb.NativeComparatorWrapperTest, $(NATIVE_JAVA_TEST_CLASSES))
+NATIVE_JAVA_TEST_CLASSES_SUBST2 = $(subst org.rocksdb.WriteBatchTestInternalHelper,, $(NATIVE_JAVA_TEST_CLASSES_SUBST))
+NATIVE_JAVA_TEST_SOURCE_WO_EXT = $(subst org.rocksdb.,org/rocksdb/,$(NATIVE_JAVA_TEST_CLASSES_SUBST2))
+NATIVE_JAVA_TEST_SOURCE_W_EXT = $(NATIVE_JAVA_TEST_SOURCE_WO_EXT:=.java)
+NATIVE_JAVA_TEST_SOURCE = $(addprefix $(TEST_SRC)/,$(NATIVE_JAVA_TEST_SOURCE_W_EXT))
+
 BENCHMARK_MAIN_SRC = benchmark/src/main/java
 BENCHMARK_OUTPUT = benchmark/target
 BENCHMARK_MAIN_CLASSES = $(BENCHMARK_OUTPUT)/classes
@@ -196,6 +207,7 @@ JAVA_MOCKITO_JAR = $(JAVA_TEST_LIBDIR)/mockito-all-1.10.19.jar
 JAVA_CGLIB_JAR = $(JAVA_TEST_LIBDIR)/cglib-2.2.2.jar
 JAVA_ASSERTJ_JAR = $(JAVA_TEST_LIBDIR)/assertj-core-1.7.1.jar
 JAVA_TESTCLASSPATH = $(JAVA_JUNIT_JAR):$(JAVA_HAMCR_JAR):$(JAVA_MOCKITO_JAR):$(JAVA_CGLIB_JAR):$(JAVA_ASSERTJ_JAR)
+JAVA_VERSION=$(shell javac -version 2>&1 | head -n 1 | cut -d " " -f 2 | cut -d. -f 1)
 
 MVN_LOCAL = ~/.m2/repository
 
@@ -234,7 +246,11 @@ java:
 		$(MAIN_SRC)/org/rocksdb/*.java
 	$(AM_V_at)@cp ../HISTORY.md ./HISTORY-CPP.md
 	$(AM_V_at)@rm -f ./HISTORY-CPP.md
+ifeq ($(shell expr $(JAVA_VERSION) \>= 11), 1)	
+	$(AM_V_at)javac -h $(NATIVE_INCLUDE) -d $(MAIN_CLASSES) -sourcepath $(MAIN_SRC) $(NATIVE_JAVA_SOURCE)
+else
 	$(AM_V_at)javah -cp $(MAIN_CLASSES) -d $(NATIVE_INCLUDE) -jni $(NATIVE_JAVA_CLASSES)
+endif
 
 sample: java
 	$(AM_V_GEN)mkdir -p $(SAMPLES_MAIN_CLASSES)
@@ -280,7 +296,11 @@ java_test: java resolve_test_deps
 		$(TEST_SRC)/org/rocksdb/test/*.java\
 		$(TEST_SRC)/org/rocksdb/util/*.java\
 		$(TEST_SRC)/org/rocksdb/*.java
+ifeq ($(shell expr $(JAVA_VERSION) \>= 11), 1)	
+	$(AM_V_at)javac -h $(NATIVE_INCLUDE) -d $(MAIN_CLASSES) -cp $(JAVA_TESTCLASSPATH) -sourcepath $(MAIN_SRC):$(TEST_SRC) $(NATIVE_JAVA_TEST_SOURCE)
+else
 	$(AM_V_at)javah -cp $(MAIN_CLASSES):$(TEST_CLASSES) -d $(NATIVE_INCLUDE) -jni $(NATIVE_JAVA_TEST_CLASSES)
+endif
 
 test: java java_test run_test
 
